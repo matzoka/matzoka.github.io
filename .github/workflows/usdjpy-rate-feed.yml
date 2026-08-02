@@ -1,0 +1,39 @@
+name: USDJPY Rate Feed
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - "fx/update_rate.py"
+      - ".github/workflows/usdjpy-rate-feed.yml"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: usdjpy-rate-feed
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Update public USDJPY feed issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: "1"
+        run: python fx/update_rate.py
