@@ -249,6 +249,55 @@ function drawLine(ctx, values, start, count, sx, sy, color, width = 1.4, dash = 
   ctx.restore();
 }
 
+function drawPriceTag(ctx, canvasWidth, canvasHeight, y, text, fill, textColor = "#071224") {
+  const padX = 8;
+  const h = 22;
+  const radius = 6;
+  ctx.save();
+  ctx.font = "700 11px system-ui";
+  const w = Math.ceil(ctx.measureText(text).width) + padX * 2;
+  const x = canvasWidth - w - 4;
+  const top = Math.max(4, Math.min(y - h / 2, canvasHeight - h - 4));
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(x + radius, top);
+  ctx.lineTo(x + w - radius, top);
+  ctx.quadraticCurveTo(x + w, top, x + w, top + radius);
+  ctx.lineTo(x + w, top + h - radius);
+  ctx.quadraticCurveTo(x + w, top + h, x + w - radius, top + h);
+  ctx.lineTo(x + radius, top + h);
+  ctx.quadraticCurveTo(x, top + h, x, top + h - radius);
+  ctx.lineTo(x, top + radius);
+  ctx.quadraticCurveTo(x, top, x + radius, top);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = textColor;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x + w / 2, top + h / 2 + 0.5);
+  ctx.restore();
+}
+
+function resolvePriceTagPositions(tags, top, bottom, minGap = 26) {
+  if (tags.length < 2) return tags;
+  const sorted = tags.map((tag) => ({ ...tag, labelY: tag.lineY })).sort((a, b) => a.labelY - b.labelY);
+  sorted[0].labelY = Math.max(top, Math.min(bottom, sorted[0].labelY));
+  for (let i = 1; i < sorted.length; i += 1) {
+    sorted[i].labelY = Math.max(sorted[i].labelY, sorted[i - 1].labelY + minGap);
+  }
+  if (sorted[sorted.length - 1].labelY > bottom) {
+    sorted[sorted.length - 1].labelY = bottom;
+    for (let i = sorted.length - 2; i >= 0; i -= 1) {
+      sorted[i].labelY = Math.min(sorted[i].labelY, sorted[i + 1].labelY - minGap);
+    }
+  }
+  if (sorted[0].labelY < top) {
+    const shift = top - sorted[0].labelY;
+    for (const tag of sorted) tag.labelY += shift;
+  }
+  return sorted;
+}
+
 function draw() {
   if (!candles.length || !studies) return;
   clampView();
@@ -265,7 +314,7 @@ function draw() {
   ctx.fillStyle = "#0d1524";
   ctx.fillRect(0, 0, width, height);
 
-  const margin = { left: 12, right: 66, top: 22, bottom: 30 };
+  const margin = { left: 12, right: 76, top: 22, bottom: 30 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
   const visible = candles.slice(view.start, view.start + view.count);
@@ -285,6 +334,7 @@ function draw() {
     addVisibleSeries(studies.bbLower);
   }
   if ($("entryLine").checked && settings.entry > 0) values.push(settings.entry);
+  if (quote?.rate > 0) values.push(Number(quote.rate));
 
   let min = Math.min(...values);
   let max = Math.max(...values);
@@ -364,18 +414,46 @@ function draw() {
   if ($("ma25").checked) drawLine(ctx, studies.ma25, view.start, visible.length, sx, sy, "#ff7fb8", 1.6);
   if ($("ma75").checked) drawLine(ctx, studies.ma75, view.start, visible.length, sx, sy, "#3b82f6", 1.6);
 
+  const priceTags = [];
   if ($("entryLine").checked && settings.entry > 0) {
+    const entryY = sy(settings.entry);
     ctx.save();
-    ctx.strokeStyle = "rgba(255,255,255,.8)";
+    ctx.strokeStyle = "#46a3ff";
     ctx.setLineDash([7, 5]);
     ctx.beginPath();
-    ctx.moveTo(margin.left, sy(settings.entry));
-    ctx.lineTo(width - margin.right, sy(settings.entry));
+    ctx.moveTo(margin.left, entryY);
+    ctx.lineTo(width - margin.right, entryY);
     ctx.stroke();
     ctx.restore();
-    ctx.fillStyle = "#fff";
-    ctx.textAlign = "left";
-    ctx.fillText(`平均売値 ${settings.entry.toFixed(3)}`, margin.left + 4, sy(settings.entry) - 9);
+    priceTags.push({ lineY: entryY, text: settings.entry.toFixed(3), fill: "#2d8cff", textColor: "#ffffff" });
+  }
+
+  if (quote?.rate > 0) {
+    const currentY = sy(Number(quote.rate));
+    ctx.save();
+    ctx.strokeStyle = "#ffd84d";
+    ctx.setLineDash([7, 5]);
+    ctx.beginPath();
+    ctx.moveTo(margin.left, currentY);
+    ctx.lineTo(width - margin.right, currentY);
+    ctx.stroke();
+    ctx.restore();
+    priceTags.push({ lineY: currentY, text: Number(quote.rate).toFixed(3), fill: "#ffd84d", textColor: "#081222" });
+  }
+
+  const positionedTags = resolvePriceTagPositions(priceTags, margin.top + 12, height - margin.bottom - 12, 26);
+  for (const tag of positionedTags) {
+    if (Math.abs(tag.labelY - tag.lineY) > 1) {
+      ctx.save();
+      ctx.strokeStyle = tag.fill;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(width - margin.right, tag.lineY);
+      ctx.lineTo(width - 68, tag.labelY);
+      ctx.stroke();
+      ctx.restore();
+    }
+    drawPriceTag(ctx, width, height, tag.labelY, tag.text, tag.fill, tag.textColor);
   }
 
   ctx.fillStyle = "#9cafc7";
@@ -424,6 +502,7 @@ async function periodic() {
   try {
     quote = await scheduled();
     render();
+    if (candles.length) draw();
     stat(`定期フィード取得完了：${new Date().toLocaleString("ja-JP")}`);
   } catch (error) {
     stat(`定期フィードを取得できませんでした：${error.message}`, true);
@@ -443,7 +522,7 @@ async function now() {
     resetView();
     render();
     stat(`最新値を直接取得しました：${new Date().toLocaleString("ja-JP")}`);
-    cstat("ドラッグで左右移動、マウスホイールで拡大・縮小、ダブルクリックで表示をリセットできます。");
+    cstat("黄色が現在値、青が平均売値です。ドラッグで左右移動、ホイールで拡大・縮小、ダブルクリックで表示をリセットできます。");
   } catch (error) {
     stat(`直接取得に失敗したため定期フィードへ切り替えます：${error.message}`, true);
     cstat(`チャート取得に失敗しました：${error.message}`, true);
@@ -564,7 +643,7 @@ canvas.addEventListener("pointerdown", onPointerDown);
 canvas.addEventListener("pointerup", endDrag);
 canvas.addEventListener("pointercancel", endDrag);
 canvas.addEventListener("lostpointercapture", endDrag);
-canvas.addEventListener("pointerleave", (event) => {
+canvas.addEventListener("pointerleave", () => {
   if (!drag.active) {
     hoverGlobalIndex = null;
     hideTip();
