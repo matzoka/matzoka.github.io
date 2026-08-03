@@ -1,51 +1,10 @@
-<!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>USD/JPY 損益モニター</title>
-<style>
-:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:dark;--bg:#0b1220;--panel:#121c2f;--muted:#9cafc7;--text:#f4f7fb;--line:#283852;--good:#42d392;--bad:#ff6b7a;--accent:#6ea8fe}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#172744 0,var(--bg) 48%);color:var(--text)}main{width:min(760px,calc(100% - 28px));margin:auto;padding:28px 0 48px}h1{margin:0 0 6px;font-size:clamp(1.5rem,5vw,2.2rem)}.sub,.status,footer{color:var(--muted)}.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:14px;box-shadow:0 18px 60px rgba(0,0,0,.25)}.hero{text-align:center;padding:28px 20px}.label{color:var(--muted);font-size:.92rem}.rate{font-size:clamp(2.7rem,12vw,5.2rem);font-weight:800;letter-spacing:-.04em;margin:6px 0 2px}.pnl{font-size:clamp(2rem,9vw,4rem);font-weight:800;margin-top:18px}.good{color:var(--good)}.bad{color:var(--bad)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.item{background:rgba(0,0,0,.13);border-radius:13px;padding:14px}.value{margin-top:5px;font-size:1.18rem;font-weight:700}.row{display:flex;gap:10px;align-items:end;flex-wrap:wrap}label{display:grid;gap:6px;flex:1 1 180px;color:var(--muted);font-size:.9rem}input,button{font:inherit;border-radius:11px;border:1px solid var(--line);padding:11px 12px}input{background:#0d1728;color:var(--text);width:100%}button{background:var(--accent);color:#071224;border:0;font-weight:750;cursor:pointer}button.secondary{background:#263852;color:var(--text)}button:disabled{opacity:.55;cursor:wait}.status{margin-top:12px;font-size:.9rem;line-height:1.55}.error{color:var(--bad)}footer{font-size:.82rem;line-height:1.6;padding:4px 4px 0}@media(max-width:560px){.grid{grid-template-columns:1fr}}
-</style>
-</head>
-<body><main>
-<h1>USD/JPY 損益モニター</h1>
-<p class="sub">通常は約5分ごとに更新。「今すぐ最新値を取得」は、その場でYahoo Financeへ照会します。</p>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>USD/JPY 損益モニター</title><link rel="stylesheet" href="style.css?v=2"></head><body><main>
+<h1>USD/JPY 損益モニター</h1><p class="sub">通常は約5分ごとに更新。「今すぐ最新値と15分足を取得」で、その場のレート・ローソク足・テクニカルを更新します。</p>
 <section class="panel hero" aria-live="polite"><div class="label">USD/JPY 現在値</div><div id="rate" class="rate">---</div><div class="label">売りポジションの概算損益</div><div id="pnl" class="pnl">---</div><div id="direction" class="status">相場データを取得しています…</div></section>
-<section class="panel grid">
-<div class="item"><div class="label">平均売値</div><div id="entryView" class="value">未設定</div></div>
-<div class="item"><div class="label">売り建玉</div><div id="positionView" class="value">未設定</div></div>
-<div class="item"><div class="label">平均売値との差</div><div id="difference" class="value">---</div></div>
-<div class="item"><div class="label">相場データ時刻</div><div id="quoteTime" class="value">---</div></div>
-<div class="item"><div class="label">152円での概算利益</div><div id="target152" class="value">---</div></div>
-<div class="item"><div class="label">147円での概算利益</div><div id="target147" class="value">---</div></div>
-</section>
-<section class="panel"><div class="row">
-<label>平均売値（円）<input id="entryInput" inputmode="decimal" type="number" min="0" step="0.001"></label>
-<label>売り建玉（USD）<input id="positionInput" inputmode="numeric" type="number" min="1" step="1"></label>
-<button id="saveButton">保存して再計算</button>
-<button id="refreshButton" class="secondary">今すぐ最新値を取得</button>
-</div><div id="status" class="status"></div></section>
-<footer>平均売値と建玉はこのブラウザ内だけに保存されます。概算損益はスプレッド・累積スワップ・手数料を含みません。</footer>
-</main>
-<script>
-const FEED_URL="https://api.github.com/repos/matzoka/matzoka.github.io/issues/1";
-const YAHOO_URL="https://query1.finance.yahoo.com/v8/finance/chart/JPY%3DX?interval=1m&range=1d";
-const PROXY_URL="https://corsproxy.io/?url="+encodeURIComponent(YAHOO_URL);
-const STORAGE_KEY="fx-usdjpy-short-settings-v1";
-const REFRESH_MS=5*60*1000;
-const $=id=>document.getElementById(id);
-const yen=new Intl.NumberFormat("ja-JP",{maximumFractionDigits:0,signDisplay:"always"});
-const number=new Intl.NumberFormat("ja-JP",{maximumFractionDigits:3});
-let settings={entry:null,position:null},currentQuote=null;
-function readBootstrapHash(){const raw=location.hash.replace(/^#/,"");if(!raw)return;const p=new URLSearchParams(raw),entry=Number(p.get("entry")),position=Number(p.get("position"));if(entry>0&&position>0){localStorage.setItem(STORAGE_KEY,JSON.stringify({entry,position}));history.replaceState(null,"",location.pathname+location.search)}}
-function loadSettings(){try{const s=JSON.parse(localStorage.getItem(STORAGE_KEY)||"null");if(s?.entry>0&&s?.position>0)settings=s}catch(_){}$("entryInput").value=settings.entry??"";$("positionInput").value=settings.position??"";render()}
-function saveSettings(){const entry=Number($("entryInput").value),position=Number($("positionInput").value);if(!(entry>0&&position>0)){setStatus("平均売値と建玉を正しく入力してください。",true);return}settings={entry,position};localStorage.setItem(STORAGE_KEY,JSON.stringify(settings));setStatus("このブラウザに保存しました。");render()}
-function setStatus(msg,err=false){$("status").textContent=msg;$("status").className=err?"status error":"status"}
-function render(){$("entryView").textContent=settings.entry?settings.entry.toFixed(3)+"円":"未設定";$("positionView").textContent=settings.position?number.format(settings.position)+" USD":"未設定";if(!currentQuote)return;const rate=Number(currentQuote.rate);$("rate").textContent=rate.toFixed(3)+"円";$("quoteTime").textContent=currentQuote.quote_time_jst||"---";if(!(settings.entry>0&&settings.position>0)){$("pnl").textContent="設定してください";return}const diff=settings.entry-rate,pnl=diff*settings.position;$("difference").textContent=(diff>=0?"+":"")+diff.toFixed(3)+"円";$("pnl").textContent=yen.format(Math.round(pnl))+"円";$("pnl").className="pnl "+(pnl>.5?"good":pnl<-.5?"bad":"");$("direction").textContent=pnl>.5?"円高方向へ進み、現在は概算含み益です。":pnl<-.5?"円安方向へ進み、現在は概算含み損です。":"ほぼ建値です。";$("target152").textContent=yen.format(Math.round((settings.entry-152)*settings.position))+"円";$("target147").textContent=yen.format(Math.round((settings.entry-147)*settings.position))+"円"}
-async function fetchScheduledFeed(){const r=await fetch(FEED_URL+"?t="+Date.now(),{headers:{Accept:"application/vnd.github+json"},cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);const issue=await r.json(),feed=JSON.parse(issue.body);if(!(Number(feed.rate)>0))throw new Error("レートが不正です");return feed}
-async function fetchYahooNow(){let r;try{r=await fetch(YAHOO_URL+"&t="+Date.now(),{cache:"no-store"})}catch(_){r=null}if(!r||!r.ok)r=await fetch(PROXY_URL+"&t="+Date.now(),{cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);const data=await r.json(),result=data?.chart?.result?.[0],meta=result?.meta;if(!meta?.regularMarketPrice)throw new Error("最新値を取得できません");const ts=meta.regularMarketTime||Math.floor(Date.now()/1000);return{rate:Number(meta.regularMarketPrice),quote_time_jst:new Date(ts*1000).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo"})+" JST",source:"Yahoo Finance（即時照会）"}}
-async function refreshScheduled(){setStatus("定期フィードを確認しています…");try{currentQuote=await fetchScheduledFeed();render();setStatus("定期フィード取得完了："+new Date().toLocaleString("ja-JP"))}catch(e){setStatus("定期フィードを取得できませんでした："+e.message,true)}}
-async function refreshNow(){const b=$("refreshButton");b.disabled=true;setStatus("Yahoo Financeへ最新値を照会しています…");try{currentQuote=await fetchYahooNow();render();setStatus("最新値を直接取得しました："+new Date().toLocaleString("ja-JP"))}catch(e){setStatus("直接取得に失敗したため定期フィードへ切り替えます："+e.message,true);await refreshScheduled()}finally{b.disabled=false}}
-$("saveButton").addEventListener("click",saveSettings);$("refreshButton").addEventListener("click",refreshNow);readBootstrapHash();loadSettings();refreshScheduled();setInterval(refreshScheduled,REFRESH_MS);
-</script></body></html>
+<section class="panel grid"><div class="item"><div class="label">平均売値</div><div id="entryView" class="value">未設定</div></div><div class="item"><div class="label">売り建玉</div><div id="positionView" class="value">未設定</div></div><div class="item"><div class="label">平均売値との差</div><div id="difference" class="value">---</div></div><div class="item"><div class="label">相場データ時刻</div><div id="quoteTime" class="value">---</div></div><div class="item"><div class="label">152円での概算利益</div><div id="target152" class="value">---</div></div><div class="item"><div class="label">147円での概算利益</div><div id="target147" class="value">---</div></div></section>
+<section class="panel"><div class="row"><label>平均売値（円）<input id="entryInput" inputmode="decimal" type="number" min="0" step="0.001"></label><label>売り建玉（USD）<input id="positionInput" inputmode="numeric" type="number" min="1" step="1"></label><button id="saveButton">保存して再計算</button><button id="refreshButton" class="secondary">今すぐ最新値と15分足を取得</button></div><div id="status" class="status"></div></section>
+<section class="panel"><div class="chartHead"><div><h2>15分足チャート</h2><div class="mini">直近96本（約24時間）。終値ベースの単純移動平均とボリンジャーバンドです。</div></div><div class="actions"><button id="pngButton" class="secondary" disabled>チャートをPNG保存</button></div></div>
+<div class="controls" style="margin-top:12px"><label><input id="ma5" type="checkbox" checked><span class="dot" style="background:var(--ma1)"></span>MA 5</label><label><input id="ma25" type="checkbox" checked><span class="dot" style="background:var(--ma2)"></span>MA 25</label><label><input id="ma75" type="checkbox" checked><span class="dot" style="background:var(--ma3)"></span>MA 75</label><label><input id="bb" type="checkbox" checked><span class="dot" style="background:var(--bb)"></span>BB 20・±2σ</label><label><input id="entryLine" type="checkbox" checked>平均売値線</label></div>
+<div class="chartWrap"><canvas id="chart"></canvas></div><div id="chartStatus" class="status">ボタンを押すと15分足を取得します。</div></section>
+<footer>平均売値と建玉はこのブラウザ内だけに保存されます。Yahoo Financeの参考値であり、SBI FXの約定可能価格とは異なる場合があります。概算損益はスプレッド・累積スワップ・手数料を含みません。</footer></main><div id="tip" class="tip"></div>
+<script src="app.js?v=2"></script></body></html>
