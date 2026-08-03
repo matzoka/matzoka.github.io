@@ -1,7 +1,7 @@
 (() => {
-  const swaps = new Map([
-    ["#42d392", "#ff6b7a"],
-    ["#ff6b7a", "#42d392"]
+  const replacements = new Map([
+    ["#42d392", "#ff315f"],
+    ["#ff6b7a", "#25c7e8"]
   ]);
 
   for (const property of ["fillStyle", "strokeStyle"]) {
@@ -14,7 +14,7 @@
       get: descriptor.get,
       set(value) {
         const normalized = typeof value === "string" ? value.toLowerCase() : value;
-        descriptor.set.call(this, swaps.get(normalized) ?? value);
+        descriptor.set.call(this, replacements.get(normalized) ?? value);
       }
     });
   }
